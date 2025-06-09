@@ -1,0 +1,27 @@
+CC      = mpicxx
+EXEC = VFS-Geophysics-3.1-10-16-22
+LIBFLAG =       -lpthread -lrt -ldl -lstdc++  \
+                -lpetsc -lHYPRE  -lgfortran -lmpicxx -lflapack -lfblas
+
+SOURCEC =       bcs.c bmv.c compgeom.c ibm.c ibm_io.c init.c \
+                main.c metrics.c poisson.c rhs.c timeadvancing.c \
+                timeadvancing1.c variables.c fsi.c implicitsolver.c\
+                fsi_move.c solvers.c rhs2.c wallfunction.c \
+                rotor_model.c turbinecontrol.c \
+                les.c k-omega.c distance.c level.c momentum.c poisson_hypre.c \
+                convection_diffusion.c sediment_transport.c PrintSequential.c \
+		data.c
+\
+
+OBJSC   = $(SOURCEC:%.c=%.o)
+
+CPPFLAGS =      -DNDEBUG  -DTECIO=1 -O3
+
+test:   $(OBJSC)
+	$(CC) -o $(EXEC) $(OBJSC) $(CPPFLAGS)  $(LIBFLAG)
+
+data: data.o
+	$(CC) -o data data.o $(CPPFLAGS) $(LIBDIR) $(LIBFLAG) -ltecio64
+clean:
+	rm *.o
+

@@ -1,0 +1,112 @@
+CC	= mpicxx
+
+#PETSCLIB=$(PETSC)/lib
+#PETSCINC1=$(PETSC)/include
+#PETSCINC2=$(PETSC)/include
+
+
+
+#PETSCLIB=/safl/software/aegean/petsc/3.2-p6-openmpi-1.6-gcc-4.7.0/lib
+#PETSCINC1=/safl/software/aegean/petsc/3.2-p6-openmpi-1.6-gcc-4.7.0/include
+#PETSCINC2=/safl/software/aegean/petsc/3.2-p6-openmpi-1.6-gcc-4.7.0/include
+
+TECINC=$(TEC360HOME)/include
+TECLIB=$(TEC360HOME)/lib
+#TECIO=$(TEC360HOME)/bin/libtecio.so
+
+#TECINC  = /safl/software/x86_64/tecplot/360_2009_R2/include
+#TECLIB  = /safl/software/x86_64/tecplot/360_2009_R2/lib
+
+
+#FFTWINC = /safl/software/x86_64/fftw/3.2.2/include
+#FFTWLIB = /safl/software/x86_64/fftw/3.2.2/lib
+
+
+
+ACMLLIB=$(ACML)/lib
+
+#HYPRELIB = $(PETSC)/lib
+#HYPREINC = $(PETSC)/include
+
+#########
+
+LIBDIR=-L$(ACMLLIB) -L$(PETSC_LIB) #-L$(HYPRELIB) -L$(FFTWLIB)
+
+LIBFLAG	=	-lpthread -lrt -ldl -lstdc++  \
+		-lpetsc -lHYPRE -lacml -lgfortran #-lX11
+
+SOURCEC	=	bcs.c bmv.c compgeom.c ibm.c ibm_io.c init.c \
+		main.c metrics.c poisson.c rhs.c timeadvancing.c \
+		timeadvancing1.c variables.c fsi.c implicitsolver.c\
+		fsi_move.c solvers.c rhs2.c wallfunction.c \
+		rotor_model.c turbinecontrol.c \
+		les.c k-omega.c distance.c level.c momentum.c poisson_hypre.c \
+		convection_diffucion.c sediment_transport.c PrintSequential.c
+
+
+OBJSC	=	bcs.o bmv.o compgeom.o ibm.o ibm_io.o init.o \
+		main.o metrics.o poisson.o rhs.o timeadvancing.o \
+		timeadvancing1.o variables.o fsi.o implicitsolver.o\
+		fsi_move.o solvers.o rhs2.o wallfunction.o \
+		rotor_model.o turbinecontrol.o		\
+		les.o k-omega.o distance.o level.o momentum.o poisson_hypre.o \
+		convection_diffusion.o sediment_transport.o PrintSequential.o
+
+CPPFLAGS =	-DNDEBUG -I$(PETSC_INC) -DTECIO=1 -O3 -std=c++11
+
+
+test:	$(OBJSC)
+	$(CC) -o VFS-Geophysics-3.1-10-16-22 $(OBJSC) $(CPPFLAGS) $(LIBDIR) $(LIBFLAG)
+
+data: data.o
+	##$(CC) -o data data.o $(CPPFLAGS) $(LIBDIR) $(LIBFLAG) -ltecio
+	$(CC) -o data data.o $(CPPFLAGS) $(LIBDIR) $(LIBFLAG) /opt/ohpc/pub/apps/tecplot/tecio64.a
+
+data05: data05.o
+	$(CC) -o data05 data05.o $(CPPFLAGS) $(LIBDIR) $(LIBFLAG)
+
+itfcsearch: itfcsearch.o
+	$(CC) -o itfcsearch itfcsearch.o $(CPPFLAGS) $(LIBDIR) $(LIBFLAG)
+
+shear: shear.o
+
+##data1: data1.o
+	##$(CC) -o data1 data1.o $(CPPFLAGS) $(LIBDIR) $(LIBFLAG) /opt/ohpc/pub/apps/tecplot/tecio64.a
+
+hill: hill.o
+	$(CC) -o hill hill.o $(CPPFLAGS) $(LIBDIR) $(LIBFLAG)
+
+#xyz: xyz2Plot3d.o
+#	$(CC) -o xyz xyz2Plot3d.o $(CPPFLAGS) $(LIBDIR) $(LIBFLAG)
+
+clean:
+	rm *.o 
+turbine: TurbineLoc.o
+	$(CC) -o TurbineLoc TurbineLoc.o $(CPPFLAGS) $(LIBDIR) $(LIBFLAG)
+terrain: terrain.o
+	$(CC) -o terrain terrain.o $(CPPFLAGS) $(LIBDIR) $(LIBFLAG)
+Tec2UCD: OSLTec2UCD.o
+	$(CC) -o Tec2UCD OSLTec2UCD.o $(CPPFLAGS) $(LIBDIR) $(LIBFLAG)
+
+#GenerateInflow: GenerateInflow__.o
+#	$(CC) -o GenerateInflow GenerateInflow__.o $(CPPFLAGS) $(LIBDIR) $(LIBFLAG) /opt/ohpc/pub/apps/tecplot/tecio64.a
+
+#ReadKevin_3dhilldat: ReadKevin_3dhilldat.o
+#	$(CC) -o ReadKevin_3dhilldat ReadKevin_3dhilldat.o $(CPPFLAGS) $(LIBDIR) $(LIBFLAG) /opt/ohpc/pub/apps/tecplot/tecio64.a
+
+#UCD2Plot3d: ucd2Plot3d_OSL.o
+#	$(CC) -o UCD2Plot3d ucd2Plot3d_OSL.o $(CPPFLAGS) $(LIBDIR) $(LIBFLAG) /opt/ohpc/pub/apps/tecplot/tecio64.a
+
+#GenInflow2: GenInflow2.o
+#	$(CC) -o GenInflow2 GenInflow2.o $(CPPFLAGS) $(LIBDIR) $(LIBFLAG) /opt/ohpc/pub/apps/tecplot/tecio64.a
+
+
+#SPAnal: SPAnal.o
+#	$(CC) -o SPAnal SPAnal.o $(CPPFLAGS) $(LIBDIR) $(LIBFLAG) /opt/ohpc/pub/apps/tecplot/tecio64.a
+
+#GenInflow3: GenInflow3.o
+#	$(CC) -o GenInflow3 GenInflow3.o $(CPPFLAGS) $(LIBDIR) $(LIBFLAG) /opt/ohpc/pub/apps/tecplot/tecio64.a
+
+
+
+

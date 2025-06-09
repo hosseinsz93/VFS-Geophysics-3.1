@@ -1,0 +1,1008 @@
+#include "variables.h"
+extern PetscInt   block_number, ti, tiout, NumberOfBodies;
+extern PetscInt   movefsi, rotatefsi, immersed, STRONG_COUPLING;
+extern PetscInt   cop, regime, fish, MHV;
+extern PetscReal  max_angle, Flux_in;
+extern int averaging, les, wallfunction, freesurface, rans;
+extern int conv_diff;
+extern int density_current;
+extern int sediment;
+extern int tistart, time_marching, poisson;
+	
+extern void free_surafe_BC(UserCtx *user);
+extern void Update_Velocity_by_Gravity(UserCtx *user);
+extern void pseudo_periodic_BC(UserCtx *user);
+
+extern void K_Omega_Set_Constant(UserCtx *user);
+extern void Solve_K_Omega(UserCtx *user);
+extern void K_Omega_IC(UserCtx *user);
+
+extern void Solve_Conv_Diff(UserCtx *user);
+extern void Conv_Diff_IC(UserCtx *user);
+
+extern void Force_Current(UserCtx *user);
+
+void Init_LevelSet_Vectors(UserCtx *user);
+void Destroy_LevelSet_Vectors(UserCtx *user);
+void Distance_Function_IC(UserCtx *user);
+void Solve_Distance(UserCtx *user);
+extern void Compute_Distance_Function(UserCtx *user);
+//extern PetscErrorCode Convection_seokkoo(UserCtx *user, Vec Ucont, Vec Ucat, Vec Conv);
+//extern PetscErrorCode Viscous(UserCtx *user, Vec Ucont, Vec Ucat, Vec Visc);
+
+PetscErrorCode calc_ibm_volumeFlux(IBMNodes *ibm, PetscReal delti, PetscReal *VolumeFlux);
+
+PetscErrorCode Struc_Solver(UserMG *usermg,IBMNodes *ibm, 
+			    FSInfo *fsi, PetscInt itr_sc,
+			    PetscInt tistart, 
+			    PetscTruth *DoSCLoop)
+{
+  PetscReal     dS_sc, dS_MIN=1e-5, dSmax;
+  UserCtx	*user;
+  PetscInt	i,bi,ibi, level, Add_dUndt=1,MHV_stuck=0 ;
+  PetscReal te,ts,cputime;
+
+  level = usermg->mglevels-1;
+  user = usermg->mgctx[level].user;
+
+/* ==================================================================================             */
+/*     Store old values to determine SC convergence */
+
+  if (movefsi || rotatefsi || MHV || fish || cop) {
+    for (ibi=0;ibi<NumberOfBodies;ibi++) {
+    for (i=0;i<6;i++){
+      fsi[ibi].S_old[i] = fsi[ibi].S_new[i];
+      fsi[ibi].S_ang_o[i]=fsi[ibi].S_ang_n[i];      
+      if (itr_sc==1) {
+	fsi[ibi].dS[i]=0.;
+	fsi[ibi].atk=0.3;	
+      }
+      fsi[ibi].dS_o[i]=fsi[ibi].dS[i];
+      fsi[ibi].atk_o=fsi[ibi].atk;
+    }
+    if (itr_sc==2)
+      fsi[ibi].atk_o=0.298;
+
+    fsi[ibi].F_x_old=fsi[ibi].F_x;
+    fsi[ibi].F_y_old=fsi[ibi].F_y;
+    fsi[ibi].F_z_old=fsi[ibi].F_z;
+    
+    fsi[ibi].M_x_old=fsi[ibi].M_x;
+    fsi[ibi].M_y_old=fsi[ibi].M_y;
+    fsi[ibi].M_z_old=fsi[ibi].M_z;
+    
+    }
+  }
+  
+/* ==================================================================================             */
+/*     Calculating Forces! */
+  if (MHV) Add_dUndt=0;
+
+  if (immersed) {
+   
+/*     if (!Add_dUndt) */
+/*     for (bi=0; bi<block_number; bi++) { */
+/*       for (ibi=0;ibi<NumberOfBodies;ibi++) { */
+  
+/*       ibm_interpolation_advanced(&user[bi], &ibm[ibi], &fsi[ibi], ibi, Add_dUndt); */
+
+/*       } */
+/*     } */
+/*       //ibm_interpolation_advanced2(&user[bi], &ibm); */
+/*     PetscBarrier(PETSC_NULL); */
+   
+
+    for (bi=0; bi<block_number; bi++) {      
+      for (ibi=0;ibi<NumberOfBodies;ibi++) {
+      //ibm_Surf_stress(&user[bi], &ibm, fsi.elmtinfo);
+      //Calc_fsi_surf_stress2(fsi.fsi_intp, &(user[bi]), &(ibm), fsi.elmtinfo);
+      //Calc_fsi_surf_stress_advanced(fsi.fsi_intp, &(user[bi]), &(ibm), fsi.elmtinfo);
+      //PetscBarrier(PETSC_NULL);
+      //Calc_forces(&fsi, &ibm, fsi.elmtinfo, user->ren, ti);
+      //SetPressure(&(user[bi]));
+/*       if (TwoD) */
+/* 	Calc_forces_CVM2D_2(&(user[bi]),fsi, ti);       */
+      if(!sediment){
+        PetscPrintf(PETSC_COMM_WORLD, "Called Calc Force SI from solver.c \n"); 
+        Calc_forces_SI(&fsi[ibi],&(user[bi]),&ibm[ibi], ti, ibi, bi);
+      }
+/*       if ((movefsi || rotatefsi || MHV || fish || cop)  && itr_sc==1) { */
+/* /\* 	fsi[ibi].F_x_old=fsi[ibi].F_x; *\/ */
+/* /\* 	fsi[ibi].F_y_old=fsi[ibi].F_y; *\/ */
+/* /\* 	fsi[ibi].F_z_old=fsi[ibi].F_z; *\/ */
+
+/* /\* 	fsi[ibi].M_x_old=fsi[ibi].M_x; *\/ */
+/* /\* 	fsi[ibi].M_y_old=fsi[ibi].M_y; *\/ */
+/* /\* 	fsi[ibi].M_z_old=fsi[ibi].M_z; *\/ */
+
+/* 	// linear extrapolation for prediction */
+/* 	fsi[ibi].F_x=1.*fsi[ibi].F_x+fsi[ibi].F_x_old-fsi[ibi].F_x_real; */
+/* 	fsi[ibi].F_y=1.*fsi[ibi].F_y+fsi[ibi].F_y_old-fsi[ibi].F_y_real; */
+/* 	fsi[ibi].F_z=1.*fsi[ibi].F_z+fsi[ibi].F_z_old-fsi[ibi].F_z_real; */
+
+/* 	fsi[ibi].M_x=1.*fsi[ibi].M_x+fsi[ibi].M_x_old-fsi[ibi].M_x_real; */
+/* 	fsi[ibi].M_y=1.*fsi[ibi].M_y+fsi[ibi].M_y_old-fsi[ibi].M_y_real; */
+/* 	fsi[ibi].M_z=1.*fsi[ibi].M_z+fsi[ibi].M_z_old-fsi[ibi].M_z_real; */
+/*       } */
+
+      }//ibi
+/* ==================================================================================             */
+/*       Ucat is copied here before it is changed by the flow solver */
+/*       it is needed for calculating the forces by CV method */
+/*       Ucat_o shouldn't be equal to Ucat  */
+
+      // Copy Ucat_o here!
+      if (itr_sc==1) 
+	VecCopy(user[bi].Ucat, user[bi].Ucat_o);
+
+      /* Corrector step! start from the same sol  */
+
+      if ((sediment || MHV || movefsi || rotatefsi || fish) && itr_sc>1) {
+	PetscPrintf(PETSC_COMM_WORLD, "Corrector Step itr # %d\n", itr_sc);
+    
+	VecCopy(user[bi].Ucont_o, user[bi].Ucont);
+	VecCopy(user[bi].P_o, user[bi].P);
+
+	DAGlobalToLocalBegin(user[bi].fda, user[bi].Ucont, INSERT_VALUES, user[bi].lUcont);
+	DAGlobalToLocalEnd(user[bi].fda, user[bi].Ucont, INSERT_VALUES, user[bi].lUcont);
+
+	DAGlobalToLocalBegin(user[bi].da, user[bi].P, INSERT_VALUES, user[bi].lP);
+	DAGlobalToLocalEnd(user[bi].da, user[bi].P, INSERT_VALUES, user[bi].lP);
+
+	if (rans) {
+      
+    VecCopy(user[bi].K_Omega, user[bi].K_Omega_o);
+      
+    DAGlobalToLocalBegin(user[bi].fda2, user[bi].K_Omega_o, INSERT_VALUES, user[bi].lK_Omega_o);
+    DAGlobalToLocalEnd(user[bi].fda2, user[bi].K_Omega_o, INSERT_VALUES, user[bi].lK_Omega_o);       
+    }
+
+	Contra2Cart(&(user[bi]));
+      }
+      PetscBarrier(PETSC_NULL);	  
+
+      //Elmt_Init_Cyl(&ibm, &(usermg.mgctx[0].user[0]));
+      /*       Elmt_Move(ibm0, &(usermg.mgctx[0].user[0])); */
+      /*       Combine_Elmt(&ibm, ibm0, ibm1); */
+
+    }
+  }
+
+/* ==================================================================================             */
+/*     Find The new Position & Move the BODY */
+  
+  if (movefsi){// && ti>tistart+3) {
+    for (level = usermg->mglevels-1; level>=usermg->mglevels-1; level--) {
+      user = usermg->mgctx[level].user;
+      for (bi=0; bi<block_number; bi++) {
+	if (immersed) {
+	for (ibi=0;ibi<NumberOfBodies;ibi++) {
+	   Calc_FSI_pos_SC(&fsi[ibi], &ibm[ibi], 0.5*(user->dt), user->dt, user->ren);
+	  //Forced_Motion(&fsi[ibi], 0.5,user->dt);	  
+	}
+
+	CollisionDetectionOfCylinders(fsi,NumberOfBodies);
+
+	for (ibi=0;ibi<NumberOfBodies;ibi++) {
+	  PetscPrintf(PETSC_COMM_WORLD, "\nCall Elmt_Move_FSI_TRANS for ibm %i\n", ibi);//KFlora
+	  Elmt_Move_FSI_TRANS(&fsi[ibi], &ibm[ibi]);
+	}
+
+	PetscBarrier(PETSC_NULL);
+
+	for (ibi=0;ibi<NumberOfBodies;ibi++) {
+	  PetscPrintf(PETSC_COMM_WORLD, "IBM_SERA\n");
+	  ibm_search_advanced(&(user[bi]), &ibm[ibi], ibi);
+	  PetscBarrier(PETSC_NULL);	  
+
+	}
+	}
+      }
+    }
+  }
+  
+  if (rotatefsi) {
+    for (level = usermg->mglevels-1; level>=usermg->mglevels-1; level--) {
+      user = usermg->mgctx[level].user;
+      for (bi=0; bi<block_number; bi++) {
+	if (immersed) {
+	   for (ibi=0;ibi<NumberOfBodies;ibi++) {
+		//if(ibi<NumberOfBodies) {		  
+		if(!fsi[ibi].fixed_ang_vel == 0){
+
+  PetscPrintf(PETSC_COMM_WORLD, "From Solvers.c, IBM %i Axis:%i at XYAngle:%f and Coord. Angles Rotate: %f %f %f, Center of Rot: %f %f %f\n", ibi, fsi[ibi].rot_dir,fsi[ibi].XYangle ,fsi[ibi].S_ang_n[0] , fsi[ibi].S_ang_n[2] , fsi[ibi].S_ang_n[4] , fsi[ibi].x_c, fsi[ibi].y_c, fsi[ibi].z_c);
+
+
+			PetscPrintf(PETSC_COMM_WORLD, "Element Rotating for ibi%i at dt:%f\n",ibi, user[bi].dt); 
+			Elmt_Move_FSI_ROT(&fsi[ibi], &ibm[ibi], user[bi].dt, ibi);
+		}
+		else {
+			PetscPrintf(PETSC_COMM_WORLD, "IBM%i Not moved because angular velocity =%lf\n",ibi,fsi[ibi].fixed_ang_vel);
+  			PetscPrintf(PETSC_COMM_WORLD, "From Solvers.c, IBM %i Axis:%i at XYAngle:%f and Coord. Angles Rotate: %f %f %f, Center of Rot: %f %f %f\n", \
+				ibi, fsi[ibi].rot_dir,fsi[ibi].XYangle ,fsi[ibi].S_ang_n[0] , fsi[ibi].S_ang_n[2] , fsi[ibi].S_ang_n[4] , fsi[ibi].x_c, fsi[ibi].y_c, fsi[ibi].z_c);
+		}
+
+		PetscBarrier(PETSC_NULL);
+		//if (!fsi[ibi].fixed_ang_vel==0 || ti==0){
+		PetscPrintf(PETSC_COMM_WORLD, "IBM %i - IBM Search called from solver w fixedNodes = %i\n", ibi, ibm->fixedNodes);
+		ibm_search_advanced(&(user[bi]), &ibm[ibi], ibi);
+		//}
+		PetscBarrier(PETSC_NULL);	  
+	   }
+	}
+      }
+    }
+  }
+
+  if (MHV && ti>-1) {
+    for (level = usermg->mglevels-1; level>=usermg->mglevels-1; level--) {
+      user = usermg->mgctx[level].user;
+      PetscReal dir=1.;
+
+      for (bi=0; bi<block_number; bi++) {
+	if (immersed) {
+	  // for leaflets ibi = 1 & 2
+	for (ibi=1;ibi<NumberOfBodies;ibi++) {
+	  dir = -1*dir;
+/* 	for (itr_dUndt=0; itr_dUndt<10;itr_dUndt++) { */
+/* 	  fsi[ibi].S_ang_o[1]=fsi[ibi].S_ang_n[1]; */
+
+/* 	  if (STRONG_COUPLING)  */
+/* 	  if (itr_sc==1) { */
+/* 	  fsi[ibi].S_ang_n[1]=2.*fsi[ibi].S_ang_r[1]-fsi[ibi].S_ang_rm1[1]; */
+/* 	  fsi[ibi].S_ang_n[0]=fsi[ibi].S_ang_r[0]+0.5*(fsi[ibi].S_ang_n[1]+fsi[ibi].S_ang_r[1])*user->dt; */
+/* 	  } else { */
+	  Calc_FSI_Ang_intg(&fsi[ibi], &ibm[ibi], user->dt,itr_sc,ibi,&user[bi]) ;
+/* 	  } */
+/* 	  else */
+/* 	  Calc_FSI_Ang_staggered(&fsi[ibi], &ibm[ibi], user->dt,ibi,&user[bi]) ; */
+
+	  if ((dir*fsi[ibi].S_ang_n[0])> -max_angle) {
+	    fsi[ibi].S_ang_n[0]= -dir*max_angle;
+	    fsi[ibi].S_ang_n[1]= 0.;
+	    MHV_stuck=1;
+	  }
+	  if ((dir*fsi[ibi].S_ang_n[0])< 0.0) {
+	    fsi[ibi].S_ang_n[0]= dir*0.0;
+	    fsi[ibi].S_ang_n[1]= 0.;
+	    MHV_stuck=1;
+	  }
+
+/* /\* 	  Elmt_Move_FSI_ROT(&fsi[ibi], &ibm[ibi], user[bi].dt, ibi); *\/ */
+
+/* /\* 	  PetscBarrier(PETSC_NULL); *\/ */
+
+/* /\* 	  PetscPrintf(PETSC_COMM_WORLD, "IBM_SERA\n"); *\/ */
+/* /\* 	  ibm_search_advanced(&(user[bi]), &ibm[ibi], ibi); *\/ */
+
+/* 	  for (i=0; i<ibm[ibi].n_v; i++) { */
+/* 	    rx = ibm[ibi].x_bp[i]-fsi[ibi].x_c; */
+/* 	    ry = ibm[ibi].y_bp[i]-fsi[ibi].y_c; */
+/* 	    rz = ibm[ibi].z_bp[i]-fsi[ibi].z_c; */
+/* 	    ibm[ibi].u[i].x =   ry*fsi[ibi].S_ang_n[5]-fsi[ibi].S_ang_n[3]*rz  ; */
+/* 	    ibm[ibi].u[i].y =-( rx*fsi[ibi].S_ang_n[5]-fsi[ibi].S_ang_n[1]*rz ); */
+/* 	    ibm[ibi].u[i].z =   rx*fsi[ibi].S_ang_n[3]-fsi[ibi].S_ang_n[1]*ry  ; */
+/* 	  } */
+
+/* 	  PetscBarrier(PETSC_NULL); */
+/* 	  ibm_interpolation_advanced(&user[bi], &ibm[ibi], &fsi[ibi], ibi,0); */
+/* 	  PetscBarrier(PETSC_NULL); */
+/* 	  Calc_forces_SI(&fsi[ibi],&(user[bi]),&ibm[ibi], ti, ibi, bi); */
+
+/* 	  PetscPrintf(PETSC_COMM_WORLD, "FSI convergence OL %d w_x:%le\n",ibi, fsi[ibi].S_ang_n[1]-fsi[ibi].S_ang_o[1]); */
+  
+/* 	} */
+
+	}
+	//PetscBarrier(PETSC_NULL);
+	for (ibi=1;ibi<NumberOfBodies;ibi++) {
+	  Elmt_Move_FSI_ROT(&fsi[ibi], &ibm[ibi], user[bi].dt, ibi);
+	}
+	PetscBarrier(PETSC_NULL);
+	for (ibi=0;ibi<NumberOfBodies;ibi++) {
+	  PetscPrintf(PETSC_COMM_WORLD, "IBM_SERA\n");
+	  ibm_search_advanced(&(user[bi]), &ibm[ibi], ibi);
+	  PetscBarrier(PETSC_NULL);	  
+	}
+	}
+      }
+    }
+  }
+
+/*   if (cop) { */
+/*     level = usermg->mglevels-1; */
+/*     user = usermg->mgctx[level].user; */
+/*     for (bi=0; bi<block_number; bi++) { */
+/*       for (ibi=0;ibi<NumberOfBodies;ibi++) { */
+/*       if (regime){ */
+/*       Calc_FSI_pos_SC(&fsi[ibi], &ibm[ibi], 0.5*(user->dt), user->dt) ; */
+/* 	//PetscPrintf(PETSC_COMM_SELF, "cop swim! \n"); */
+/*       cop_swim(&ibm[ibi], ti*user[bi].dt, user[bi].dt); */
+/*       PetscBarrier(PETSC_NULL); */
+/*       PetscPrintf(PETSC_COMM_WORLD, "IBM_SERA\n"); */
+/*       ibm_search_advanced(&(user[bi]), &ibm[ibi], ibi); */
+/*       PetscBarrier(PETSC_NULL); */
+/*       } */
+/*       } */
+/*     } */
+/*   } */
+
+/*   if (fish) { */
+/*     level = usermg->mglevels-1; */
+/*     user = usermg->mgctx[level].user; */
+/*     for (bi=0; bi<block_number; bi++) { */
+/*       for (ibi=0;ibi<NumberOfBodies;ibi++) { */
+
+/* 	//Calc_FSI_pos_intg(&fsi[ibi], &ibm[ibi], (user->dt)) ; */
+/* 	if (ibi==0) { */
+/*       PetscPrintf(PETSC_COMM_WORLD, "fish swim! \n"); */
+/*       fish_swim(&ibm[ibi],(ti)*user[bi].dt, user[bi].dt); */
+/* 	} */
+/*       PetscBarrier(PETSC_NULL); */
+/*       PetscPrintf(PETSC_COMM_WORLD, "IBM_SERA\n"); */
+/*       ibm_search_advanced(&(user[bi]), &ibm[ibi], ibi); */
+/*       PetscBarrier(PETSC_NULL); */
+      
+/*       } */
+/*     } */
+/*   } */
+
+/* ==================================================================================             */
+/*  Sediment  */
+/* ==================================================================================             */
+    /* if (sediment && STRONG_COUPLING)
+    {
+     for (ibi=0;ibi<NumberOfBodies;ibi++) {
+     for (i=0;i<ibm[ibi].n_elmt;i++){
+   	   if(itr_sc==1) ibm[ibi].atke_old[i] = 0.3;
+   	   if(itr_sc==2) ibm[ibi].atke_old[i] = 0.298;
+     }}
+    }*/  
+ 
+ if (sediment ) {
+    level = usermg->mglevels-1;
+    user = usermg->mgctx[level].user;
+    for (bi=0; bi<block_number; bi++) {
+      if (immersed) {
+	for (ibi=0;ibi<NumberOfBodies;ibi++) {
+        PetscGetTime(&ts);
+	//for (ibi=0;ibi<1;ibi++) {   //Ali deactivated and added ibi==0 in below line to correct for multi IB sediment transport
+        if (ibi == 0) Scour(&user[bi],&ibm[ibi],tistart,ti,itr_sc);
+        PetscGetTime(&te);
+        cputime=te-ts;
+        PetscPrintf(PETSC_COMM_WORLD, "Total Sediment-Transport cputime %d %le\n",ti,cputime);
+//	calc_ibm_normal(&ibm[ibi]);	
+//	if (ti>0) calc_ibm_velocity(&ibm[ibi], user[bi].dt);
+
+	calc_ibm_volumeFlux(&ibm[ibi], user[bi].dt, &(user[bi].FluxIntpSum));
+
+//	ibm_surface_out(&ibm[ibi],ti,ibi);
+	}
+	VecSet(user[bi].Nvert,0.);
+	VecSet(user[bi].lNvert,0.);
+	for (ibi=0;ibi<NumberOfBodies;ibi++) {
+	  PetscPrintf(PETSC_COMM_WORLD, "IBM_Search\n");
+        PetscGetTime(&ts);
+	  ibm_search_advanced(&(user[bi]), &ibm[ibi], ibi);
+	  PetscBarrier(PETSC_NULL);	  
+        PetscGetTime(&te);
+        cputime=te-ts;
+        PetscPrintf(PETSC_COMM_WORLD, "IBMSEARCH cputime %d %le\n",ti,cputime);
+        //ibm_interpolation_advanced(&(user[bi]),&ibm[ibi],ibi,1);
+      
+        ibm_interpolation_advanced(&(user[bi]));
+       PetscPrintf(PETSC_COMM_WORLD, "IBM_Interpolation done after bed changed/\n");
+          }
+      }
+    }// bi
+  }
+
+/* ==================================================================================             */
+/*   Convergence of the SC Loop */
+/* ==================================================================================             */
+
+  *DoSCLoop = PETSC_FALSE;
+  dSmax=1e-10;
+  for (ibi=0;ibi<NumberOfBodies;ibi++) {
+  
+  if ((movefsi || fish) && STRONG_COUPLING) {
+    for (i=0;i<6;i++) {
+    dS_sc = fabs(fsi[ibi].S_new[i]-fsi[ibi].S_old[i]);
+    if (dS_sc > dS_MIN) *DoSCLoop = PETSC_TRUE;
+    if (dS_sc > dSmax) dSmax=dS_sc;
+    }
+/*     dS_sc = fabs(fsi[ibi].S_new[2]-fsi[ibi].S_old[2]); */
+/*     if (dS_sc > dS_MIN) *DoSCLoop = PETSC_TRUE; */
+  }
+
+  if ((rotatefsi||MHV) && STRONG_COUPLING) {
+    dS_sc = fabs(fsi[ibi].S_ang_n[0]-fsi[ibi].S_ang_o[0]);
+    if (dS_sc > dS_MIN) *DoSCLoop = PETSC_TRUE;
+    dS_sc = fabs(fsi[ibi].S_ang_n[1]-fsi[ibi].S_ang_o[1]);
+    if(fabs(fsi[ibi].S_ang_n[1]+fsi[ibi].S_ang_o[1])>2.) 
+      dS_sc /= 0.5*fabs(fsi[ibi].S_ang_n[1]+fsi[ibi].S_ang_o[1]);
+
+    if (dS_sc > dS_MIN) *DoSCLoop = PETSC_TRUE;
+    if (dS_sc > dSmax) dSmax=dS_sc;
+
+/*     *DoSCLoop = PETSC_TRUE; */
+  }
+
+  //*******************************************
+ if (sediment && ibi == 0 && STRONG_COUPLING)  //Ali added ibi==0 to correct for multi IB sediment transport
+    {
+       double DZ= 0.0;
+       int iter=0.0;
+     for (i=0;i<ibm[ibi].n_v;i++)
+         {
+          if (ibm->nf_z[i]<1.e-7 || ibm->elmt_depth[i]>0.2)
+             {
+             } 
+          else
+             {
+             // DZ = PetscMax(DZ, fabs(ibm[ibi].z_bp_l[i]-ibm[ibi].z_bp[i]));
+              {DZ += (ibm[ibi].z_bp_l[i]-ibm[ibi].z_bp[i])*(ibm[ibi].z_bp_l[i]-ibm[ibi].z_bp[i]);
+              iter++;}
+             }
+        }
+      DZ = sqrt(DZ/iter);
+      if (DZ > dS_MIN) *DoSCLoop = PETSC_TRUE;
+     
+      PetscPrintf(PETSC_COMM_WORLD, "bed_change SC Convergence ti & itr_sc & residual %d %d %le \n", ti, itr_sc, DZ);
+    }
+
+/*
+ if (sediment && STRONG_COUPLING)
+    {
+       double DZ= 0.0;
+       int iter=0.0;
+     for (i=0;i<ibm[ibi].n_elmt;i++){
+          if (ibm->nf_z[i]<1.e-7 || ibm->elmt_depth[i]>0.2)
+             {
+             } 
+          else
+          {
+          DZ = PetscMax(DZ, fabs(ibm[ibi].cent_zl[i]-ibm[ibi].cent_z[i]));
+          //DZ += (ibm[ibi].cent_zl[i]-ibm[ibi].cent_z[i])*(ibm[ibi].cent_zl[i]-ibm[ibi].cent_z[i]);
+          //iter++;
+          }
+      }
+   // DZ = sqrt(DZ);
+   // DZ /= sqrt(iter);
+    if (DZ > dS_MIN) *DoSCLoop = PETSC_TRUE;
+    }*/
+
+//*******************************************
+  
+  if ((movefsi || rotatefsi || MHV || fish || sediment) && STRONG_COUPLING && itr_sc<2) 
+    *DoSCLoop = PETSC_TRUE;  
+
+  } // ibi  
+
+  if (itr_sc>9) *DoSCLoop = PETSC_FALSE;
+  if (MHV_stuck && itr_sc==1) *DoSCLoop = PETSC_FALSE;
+
+  PetscPrintf(PETSC_COMM_WORLD, "S-C Convergence %d %le %le %le\n", itr_sc, dSmax,fsi[1].S_ang_n[1],fsi[1].S_ang_o[1]);
+  
+  for (ibi=0;ibi<NumberOfBodies;ibi++) {
+
+    if (ti == (ti/tiout) * tiout && (movefsi || rotatefsi || cop || MHV) && !(*DoSCLoop)) FSI_DATA_Output(&fsi[ibi], ibi);
+  
+  }
+/* ==================================================================================             */
+    
+  return(0);
+}
+/* ==================================================================================             */
+
+PetscErrorCode Struc_predictor(UserMG *usermg,IBMNodes *ibm, 
+			       FSInfo *fsi, PetscInt itr_sc,
+			       PetscInt tistart, 
+			       PetscTruth *DoSCLoop)
+{
+  UserCtx	*user;
+  PetscInt	bi,ibi, level, MHV_stuck=0 ;
+
+  level = usermg->mglevels-1;
+  user = usermg->mgctx[level].user;
+
+  if (MHV && ti>-1) {
+    for (level = usermg->mglevels-1; level>=usermg->mglevels-1; level--) {
+      user = usermg->mgctx[level].user;
+      PetscReal dir=1.;
+
+      for (bi=0; bi<block_number; bi++) {
+	if (immersed) {
+	  // for leaflets ibi = 1 & 2
+	for (ibi=1;ibi<NumberOfBodies;ibi++) {
+	  dir = -1*dir;
+	  fsi[ibi].S_ang_n[1]=2.*fsi[ibi].S_ang_r[1]-fsi[ibi].S_ang_rm1[1];
+	  fsi[ibi].S_ang_n[0]=fsi[ibi].S_ang_r[0]+0.5*(fsi[ibi].S_ang_n[1]+fsi[ibi].S_ang_r[1])*user->dt;
+
+	  if ((dir*fsi[ibi].S_ang_n[0])> -max_angle) {
+	    fsi[ibi].S_ang_n[0]= -dir*max_angle;
+	    fsi[ibi].S_ang_n[1]= 0.;
+	    MHV_stuck=1;
+	  }
+	  if ((dir*fsi[ibi].S_ang_n[0])< 0.0) {
+	    fsi[ibi].S_ang_n[0]= dir*0.0;
+	    fsi[ibi].S_ang_n[1]= 0.;
+	    MHV_stuck=1;
+	  }
+
+
+	}
+	//PetscBarrier(PETSC_NULL);
+	for (ibi=1;ibi<NumberOfBodies;ibi++) {
+	  Elmt_Move_FSI_ROT(&fsi[ibi], &ibm[ibi], user[bi].dt, ibi);
+	}
+	PetscBarrier(PETSC_NULL);
+	for (ibi=0;ibi<NumberOfBodies;ibi++) {
+	  PetscPrintf(PETSC_COMM_WORLD, "IBM_SERA\n");
+	  ibm_search_advanced(&(user[bi]), &ibm[ibi], ibi);
+	  PetscBarrier(PETSC_NULL);	  
+	}
+	}
+      }
+    }
+  }    
+  return(0);
+}
+/* ==================================================================================             */
+
+
+/* ==================================================================================             */
+/*     Flow Solver! */
+/* ==================================================================================             */
+PetscErrorCode Flow_Solver(UserMG *usermg,IBMNodes *ibm, FSInfo *fsi)
+{
+
+	
+	
+	
+		
+  UserCtx	*user;
+  PetscInt	bi, level;
+
+	
+/* ==================================================================================             */
+
+  if (immersed) {
+    for (level=usermg->mglevels-1; level>0; level--) {
+      for (bi=0; bi<block_number; bi++) {
+	MyNvertRestriction(&(usermg->mgctx[level].user[bi]), &(usermg->mgctx[level-1].user[bi]));
+      }
+    }
+  }
+
+/* ==================================================================================             */
+
+  level = usermg->mglevels-1;
+  user = usermg->mgctx[level].user;
+
+
+	
+	Calc_Minimum_dt(user);	// momentum.c
+  
+	#ifdef DIRICHLET
+	if(freesurface && ti!=tistart) {
+		void update_free_surface_position(UserCtx *user);
+		update_free_surface_position(&user[0]);
+	}
+	#endif
+	
+/* ==================================================================================             */
+/*   Momentum Solver! */
+/* ==================================================================================             */
+
+	if(ti==tistart) {	// seokkoo
+		for (bi=0; bi<block_number; bi++) {
+			if (immersed) {
+				/*for (ibi=0;ibi<NumberOfBodies;ibi++) */{
+					ibm_interpolation_advanced(&user[bi]);
+				}
+			}
+			IB_BC(&user[bi]);
+			DALocalToGlobal(user[bi].fda, user[bi].lUcont, INSERT_VALUES, user[bi].Ucont);
+			
+			//DAGlobalToLocalBegin(user[bi].fda, user[bi].Ucat, INSERT_VALUES, user[bi].lUcat_old);
+			//DAGlobalToLocalEnd(user[bi].fda, user[bi].Ucat, INSERT_VALUES, user[bi].lUcat_old);
+		}
+	} 
+	
+	#ifdef PRIMITIVE_PRESSURE
+	//extern int momentum_option;
+	//momentum_option=-1;
+	//momentum_option=1;
+	#endif 
+	
+	
+		
+	if(pseudo_periodic || k_periodic || kk_periodic) {
+		pseudo_periodic_BC(user);
+		if(save_inflow) save_inflow_section(user);
+	}
+
+	if(save_inflow && (!pseudo_periodic || !k_periodic || !kk_periodic)) {
+		save_inflow_section(user);
+        }
+  
+	if (inletprofile==100) {	// read inflow data
+		read_inflow_section(user);
+	}
+
+	/*
+	Convection_seokkoo(&user[0], user[0].lUcont, user[0].lUcat, user[0].Conv_o);
+	Viscous(&user[0], user[0].lUcont, user[0].lUcat, user[0].Visc_o);
+	*/
+	
+	Calc_k_Flux(&user[0]);
+		
+	//PetscPrintf(PETSC_COMM_WORLD, "haha1");
+
+	if(les){
+		DAGlobalToLocalBegin(user->fda, user->Ucont, INSERT_VALUES, user->lUcont);
+		DAGlobalToLocalEnd(user->fda, user->Ucont, INSERT_VALUES, user->lUcont);
+		Contra2Cart(user);
+		if(ti%dynamic_freq==0 || ti==tistart) Compute_Smagorinsky_Constant_1(user, user->lUcont, user->lUcat);
+		Compute_eddy_viscosity_LES(user);
+	}
+	
+	
+	if (levelset) {
+		if(ti==tistart && ti==0) {
+			Levelset_Function_IC(&user[0]);
+			/*
+			DAGlobalToLocalBegin(user[0].da, user[0].Levelset, INSERT_VALUES, user[0].lLevelset);
+			DAGlobalToLocalEnd(user[0].da, user[0].Levelset, INSERT_VALUES, user[0].lLevelset);*/
+			VecCopy(user[0].Levelset, user[0].Levelset_o);
+		}
+	//PetscPrintf(PETSC_COMM_WORLD, "\nhaha2");
+		DAGlobalToLocalBegin(user[0].da, user[0].Levelset, INSERT_VALUES, user[0].lLevelset);
+		DAGlobalToLocalEnd(user[0].da, user[0].Levelset, INSERT_VALUES, user[0].lLevelset);
+		
+		if(!fix_level && ti!=0) {
+			//Reinit_Levelset(&user[0]);
+	//PetscPrintf(PETSC_COMM_WORLD, "\nhaha3");
+			Advect_Levelset(&user[0]);
+        //PetscPrintf(PETSC_COMM_WORLD, "\nhaha4");
+			Levelset_BC(&user[0]);
+        //PetscPrintf(PETSC_COMM_WORLD, "\nhaha5");
+			Reinit_Levelset(&user[0]);
+        //PetscPrintf(PETSC_COMM_WORLD, "\nhaha6");
+			Levelset_BC(&user[0]);
+        //PetscPrintf(PETSC_COMM_WORLD, "\nhaha7");
+			//Calc_free_surface_location(&user[0]);
+		}
+		
+		Compute_Density(&user[0]);
+		if(surface_tension) Compute_Surface_Tension(&user[0]);
+	}
+	
+	
+	if(rans) {
+	  extern char path[256];
+	  char filen[256];
+	  PetscViewer     viewer;
+	  if( ti==tistart && rans==3 ) {
+	    bi=0;
+	    sprintf(filen, "%s/Distance_%1d.dat", path, user->_this);
+	    if(!ti || !file_exist(filen)) {
+	      Compute_Distance_Function(user);
+	      PetscViewerBinaryOpen(PETSC_COMM_WORLD, filen, FILE_MODE_WRITE, &viewer);
+	      VecView(user->Distance, viewer);
+	      PetscViewerDestroy(viewer);
+	    }
+	  }
+
+
+		if(ti==0) {
+			PetscPrintf(PETSC_COMM_WORLD, "\nInitializing K-omega ... \n\n");
+			K_Omega_IC(user);
+			VecSet(user->lNu_t, user->ren);
+			
+			bi=0;
+			VecCopy(user[bi].K_Omega, user[bi].K_Omega_o);
+		
+			DAGlobalToLocalBegin(user[bi].fda2, user[bi].K_Omega, INSERT_VALUES, user[bi].lK_Omega);
+			DAGlobalToLocalEnd(user[bi].fda2, user[bi].K_Omega, INSERT_VALUES, user[bi].lK_Omega);
+			DAGlobalToLocalBegin(user[bi].fda2, user[bi].K_Omega_o, INSERT_VALUES, user[bi].lK_Omega_o);
+			DAGlobalToLocalEnd(user[bi].fda2, user[bi].K_Omega_o, INSERT_VALUES, user[bi].lK_Omega_o);
+		}
+		else {
+		  bi=0;
+		  if(ti==tistart) {
+		    VecCopy(user[bi].K_Omega, user[bi].K_Omega_o);
+		    DAGlobalToLocalBegin(user[bi].fda2, user[bi].K_Omega, INSERT_VALUES, user[bi].lK_Omega);
+		    DAGlobalToLocalEnd(user[bi].fda2, user[bi].K_Omega, INSERT_VALUES, user[bi].lK_Omega);
+		    DAGlobalToLocalBegin(user[bi].fda2, user[bi].K_Omega_o, INSERT_VALUES, user[bi].lK_Omega_o);
+		    DAGlobalToLocalEnd(user[bi].fda2, user[bi].K_Omega_o, INSERT_VALUES, user[bi].lK_Omega_o);
+		  }
+		  K_Omega_Set_Constant(user);
+		}
+		//PetscPrintf(PETSC_COMM_WORLD, "haha4");
+	}
+
+
+	if(conv_diff) {
+	  extern char path[256];
+	  char filen[256];
+	  PetscViewer     viewer;
+
+		if(ti==0) {
+			PetscPrintf(PETSC_COMM_WORLD, "\nInitializing Conv_Diff ... \n\n");
+			Conv_Diff_IC(user);
+                        	
+			bi=0;
+			VecCopy(user[bi].Conc, user[bi].Conc_o);
+		
+			DAGlobalToLocalBegin(user[bi].da, user[bi].Conc, INSERT_VALUES, user[bi].lConc);
+			DAGlobalToLocalEnd(user[bi].da, user[bi].Conc, INSERT_VALUES, user[bi].lConc);
+			DAGlobalToLocalBegin(user[bi].da, user[bi].Conc_o, INSERT_VALUES, user[bi].lConc_o);
+			DAGlobalToLocalEnd(user[bi].da, user[bi].Conc_o, INSERT_VALUES, user[bi].lConc_o);
+          
+                       if(density_current) VecSet(user[bi].lFCurrent,0);
+                       if(density_current) VecSet(user[bi].FCurrent,0);
+
+		}
+		else {
+		  bi=0;
+		  if(ti==tistart) {
+		    VecCopy(user[bi].Conc, user[bi].Conc_o);
+		    DAGlobalToLocalBegin(user[bi].da, user[bi].Conc, INSERT_VALUES, user[bi].lConc);
+		    DAGlobalToLocalEnd(user[bi].da, user[bi].Conc, INSERT_VALUES, user[bi].lConc);
+		    DAGlobalToLocalBegin(user[bi].da, user[bi].Conc_o, INSERT_VALUES, user[bi].lConc_o);
+		    DAGlobalToLocalEnd(user[bi].da, user[bi].Conc_o, INSERT_VALUES, user[bi].lConc_o);
+		  }
+		}
+	}
+
+	VecDuplicate(user[0].lUcont, &user[0].Fp);
+	VecDuplicate(user[0].lUcont, &user[0].Div1);
+	VecDuplicate(user[0].lUcont, &user[0].Div2);
+	VecDuplicate(user[0].lUcont, &user[0].Div3);
+	VecDuplicate(user[0].lUcont, &user[0].Visc1);
+	VecDuplicate(user[0].lUcont, &user[0].Visc2);
+	VecDuplicate(user[0].lUcont, &user[0].Visc3);
+
+
+	Pressure_Gradient(&user[0], user[0].dP);
+	//VecSet (user[0].RHS_o, 0.);
+	//Formfunction_2 (&user[0], user[0].RHS_o, 1.0);
+		
+	//Pressure_Gradient(&user[0], user[0].dP);
+	
+	//PetscPrintf(PETSC_COMM_WORLD, "haha7\n");
+
+	if(inletprofile==20){}
+	else if (implicit==1) ImplicitMomentumSolver(user, ibm, fsi);
+	else if (implicit==2) ImplicitMomentumSolver1(user, ibm, fsi);
+	else if (implicit==3) ImpRK(user, ibm, fsi);
+	else if (implicit==4) {
+	  //  PetscPrintf(PETSC_COMM_WORLD, "haha7-1\n");
+	  VecSet (user[0].RHS_o, 0.);
+	  //  PetscPrintf(PETSC_COMM_WORLD, "haha7-2\n");
+	  Formfunction_2 (&user[0], user[0].RHS_o, 1.0);
+	  //	  PetscPrintf(PETSC_COMM_WORLD, "haha7-3\n");
+		extern PetscErrorCode Implicit_MatrixFree(UserCtx *user, IBMNodes *ibm, FSInfo *fsi);	  
+		Implicit_MatrixFree(user, ibm, fsi);
+		//PetscPrintf(PETSC_COMM_WORLD, "haha7-4\n");
+	}
+  	else {
+		COEF_TIME_ACCURACY=1.0;
+		RungeKutta(user, ibm, fsi);
+	}
+
+	//PetscPrintf(PETSC_COMM_WORLD, "haha8");
+
+	VecDestroy(user[0].Fp);
+	VecDestroy(user[0].Div1);
+	VecDestroy(user[0].Div2);
+	VecDestroy(user[0].Div3);
+	VecDestroy(user[0].Visc1);
+	VecDestroy(user[0].Visc2);
+	VecDestroy(user[0].Visc3);
+
+	//PetscPrintf(PETSC_COMM_WORLD, "haha9");
+
+	
+	//if(levelset) Update_Velocity_by_Gravity(&user[0]);
+	
+//	if (immersed) ibm_interpolation_advanced(&user[0]);
+	//PetscPrintf(PETSC_COMM_WORLD, "haha10");
+
+	
+	
+/* ==================================================================================             */
+/*    Poisson Solver! */
+/* ==================================================================================             */
+
+	PetscBarrier(PETSC_NULL);
+    
+	
+	for(bi=0; bi<block_number; bi++) {
+		if(inletprofile==20){}
+		else if(poisson==-1) PoissonSolver_MG_original(usermg, ibm, user[bi].ibm_intp);
+		else if(poisson==0) PoissonSolver_MG(usermg, ibm, user[bi].ibm_intp);
+		else if(poisson==1) PoissonSolver_Hypre(&user[bi], ibm, user[bi].ibm_intp);
+	}
+  
+  
+	
+
+/* ==================================================================================             */
+/*    Velocity Correction! */
+/* ==================================================================================             */
+
+	
+	if(inletprofile!=20)
+	for (bi=0; bi<block_number; bi++) {
+		UpdatePressure(&user[bi]);
+		Projection(&(user[bi]));
+		DAGlobalToLocalBegin(user[bi].da, user[bi].P, INSERT_VALUES, user[bi].lP);
+		DAGlobalToLocalEnd(user[bi].da, user[bi].P, INSERT_VALUES, user[bi].lP);
+	}
+	
+	//if(levelset) Advect_Levelset(&user[0]);
+  
+    	#ifdef DIRICHLET
+	//free_surafe_BC(&user[0]);
+	#endif
+  
+
+/* ==================================================================================             */
+/*   BC!!    */
+/* ==================================================================================             */
+
+
+  
+  if (block_number>1) {
+    Block_Interface_U(user);
+  }
+
+      //    PetscPrintf(PETSC_COMM_WORLD, "Proj\n");
+  for (bi=0; bi<block_number; bi++) {
+    if (immersed) {
+      /*for (ibi=0;ibi<NumberOfBodies;ibi++) */{
+	ibm_interpolation_advanced(&user[bi]);
+      }
+    }
+    
+
+/* ==================================================================================             
+   Checking Convergence!
+ ==================================================================================             */
+    
+	bi = 0;	//seokkoo
+	Divergence(&(user[bi]));
+	
+	
+	for (bi=0; bi<block_number; bi++) {
+          IB_BC(&user[bi]);
+          DALocalToGlobal(user[bi].fda, user[bi].lUcont, INSERT_VALUES, user[bi].Ucont);
+	  Contra2Cart(&(user[bi]));
+        } // 101227
+
+	bi=0;
+	Calc_ShearStress(&user[0]);
+    
+	write_data(&user[0]);
+/* ==================================================================================             */
+
+/*     if (ti == (ti/tiout)*tiout) */
+/*       TecOut(&user); */
+
+
+    //    PetscPrintf(PETSC_COMM_WORLD, "ibm intp\n");
+      // Stop out put temporary -lg65
+
+/* ==================================================================================             */
+/*     OUTPUT Values! */
+/* ==================================================================================             */
+
+	
+	//extern void RHS_SST_K(UserCtx *user, Vec RHS);
+	//RHS_SST_K(&user[0], KRHS);
+	
+	if(averaging) {	// seokkoo
+		extern PetscErrorCode Do_averaging(UserCtx *user);
+		Do_averaging(&user[0]);
+		
+		/*
+		
+		VecAXPY(user[0].P_sum, 1.0, user[0].P);
+		PetscScalar *p2sum, *p;
+		VecGetLocalSize(user[0].P_square_sum, &N);
+		VecGetArray(user[0].P_square_sum, &p2sum);
+		VecGetArray(user[0].P, &p);
+		for(v=0; v<N; v++) p2sum[v] += p[v] * p[v];
+		VecRestoreArray(user[0].P_square_sum, &p2sum);
+		VecRestoreArray(user[0].P, &p);
+		*/
+	}
+	
+	
+	
+	
+	if(wallfunction || les) {
+		/*
+		extern void Calc_yplus_at_boundary(UserCtx *user);
+		bi=0;
+		Calc_yplus_at_boundary(&user[bi]);*/
+	}
+	
+	if(les>=2) {
+		/*
+		bi=0;
+		VecCopy(user[bi].Cs, user[bi].Cs_o);
+		DAGlobalToLocalBegin(user[bi].da, user[bi].Cs_o, INSERT_VALUES, user[bi].lCs_o);
+		DAGlobalToLocalEnd(user[bi].da, user[bi].Cs_o, INSERT_VALUES, user[bi].lCs_o);
+		*/
+	}
+
+	extern PetscErrorCode KE_Output(UserCtx *user);
+	KE_Output(user);
+	
+	int i;
+	for (i = 0; i < (rand() % 3000); i++) (rand() % 3000);	//seokkoo
+
+	if(rans) {
+		
+		
+		K_Omega_Set_Constant(user);
+		Solve_K_Omega(user);
+		
+//		VecCopy(user[bi].K_Omega_o, user[bi].K_Omega_rm1);
+		VecCopy(user[bi].K_Omega, user[bi].K_Omega_o);
+		
+		DAGlobalToLocalBegin(user[bi].fda2, user[bi].K_Omega, INSERT_VALUES, user[bi].lK_Omega);
+		DAGlobalToLocalEnd(user[bi].fda2, user[bi].K_Omega, INSERT_VALUES, user[bi].lK_Omega);
+		DAGlobalToLocalBegin(user[bi].fda2, user[bi].K_Omega_o, INSERT_VALUES, user[bi].lK_Omega_o);
+		DAGlobalToLocalEnd(user[bi].fda2, user[bi].K_Omega_o, INSERT_VALUES, user[bi].lK_Omega_o);
+
+	}
+	
+PetscReal tss,tee,cputimee;	
+	if(conv_diff) {
+
+PetscGetTime(&tss);
+
+		Solve_Conv_Diff(user);
+
+		VecCopy(user[bi].Conc, user[bi].Conc_o);
+		
+		DAGlobalToLocalBegin(user[bi].da, user[bi].Conc, INSERT_VALUES, user[bi].lConc);
+		DAGlobalToLocalEnd(user[bi].da, user[bi].Conc, INSERT_VALUES, user[bi].lConc);
+		DAGlobalToLocalBegin(user[bi].da, user[bi].Conc_o, INSERT_VALUES, user[bi].lConc_o);
+		DAGlobalToLocalEnd(user[bi].da, user[bi].Conc_o, INSERT_VALUES, user[bi].lConc_o);
+            
+PetscGetTime(&tee);
+cputimee = tee-tss;
+int rank;
+MPI_Comm_rank(PETSC_COMM_WORLD,&rank);
+if(!rank) {
+           FILE *f;
+           char filen [80];
+           sprintf(filen,"%s/Converge_dU", path);
+           f = fopen (filen, "a");
+           PetscFPrintf(PETSC_COMM_WORLD, f, "%d(Convection-Diffusion) %.2e(s)\n", ti, cputimee);
+           fclose(f); }
+	}
+                if(density_current)Force_Current(user);
+	
+	//if (ti == (ti/tiout) * tiout || ti==tistart) if(immersed) write_shear_stress_ibm();
+	bi=0;
+	if (ti == (ti/tiout) * tiout) {
+		Ucont_P_Binary_Output(&(user[bi]));
+	}
+	else if (tiout_ufield>0 && ti == (ti/tiout_ufield) * tiout_ufield && ti<=tiend_ufield) Ucat_Binary_Output(&(user[bi]));
+	
+  }
+
+/* ==================================================================================             */
+/*     End of Flow Solver! */
+/* ==================================================================================             */
+
+  return(0);
+
+}
