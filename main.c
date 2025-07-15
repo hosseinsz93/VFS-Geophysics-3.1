@@ -53,6 +53,7 @@ PetscInt implicit = 0;
 PetscInt imp_MAX_IT = 50; 
 PetscInt radi=10;
 PetscInt inletprofile=1;
+PetscInt inletCase=0; //Hossein-7/15/2025 (Verdant-SBU project)
 PetscInt inletCase=1;
 PetscInt inletprofile_tmprt=1;
 PetscReal CMx_c=0., CMy_c=0., CMz_c=0.;
@@ -1613,6 +1614,7 @@ int main(int argc, char **argv)
     PetscOptionsGetInt(PETSC_NULL, "-radi", &radi, PETSC_NULL);
     PetscOptionsGetInt(PETSC_NULL, "-inlet", &inletprofile, PETSC_NULL);
     PetscOptionsGetInt(PETSC_NULL, "-case", &inletCase, PETSC_NULL); //Hossein-1/21/2025 (Lehigh-SBU project) 
+    PetscOptionsGetInt(PETSC_NULL, "-inletCase", &inletCase, PETSC_NULL);
    	PetscOptionsGetInt(PETSC_NULL, "-inlet_tmprt", &inletprofile_tmprt, PETSC_NULL);
     PetscOptionsGetInt(PETSC_NULL, "-str", &STRONG_COUPLING, PETSC_NULL);
     PetscOptionsGetInt(PETSC_NULL, "-rs_fsi", &rstart_fsi, PETSC_NULL);

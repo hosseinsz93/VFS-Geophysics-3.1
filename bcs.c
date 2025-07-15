@@ -156,6 +156,32 @@ PetscReal InletInterpolation(PetscReal r, UserCtx *user)   //Open Channel Inlet 
     return(u);
 }
 
+// Hossein-7/15/2025 (Verdant-SBU project) - For the Ebb/Flood cycles, using polynomial fits to ADCP data
+PetscReal InletInterpolationLISTEP(PetscReal r, UserCtx *user)   //Open Channel Inlet Profile: Polynomial (Ebb/Flood)
+{
+  PetscReal u;
+  PetscReal z = r;  // z is the vertical coordinate (same as r in this context)
+  
+  if (inletCase == 1) {
+    // Flood velocity profile: v(z) = 0.000885z^3 - 0.012448z^2 + 0.106238z + 0.706984
+    u = 0.000885 * z * z * z - 0.012448 * z * z + 0.106238 * z + 0.706984;
+  }
+  else if (inletCase == 2) {
+    // Ebb velocity profile: v(z) = 0.000851z^3 - 0.011721z^2 + 0.096477z + 0.683452
+    u = 0.000851 * z * z * z - 0.011721 * z * z + 0.096477 * z + 0.683452;
+  }
+  else {
+    // Default to flood profile if inletCase is not 1 or 2
+    u = 0.000885 * z * z * z - 0.012448 * z * z + 0.106238 * z + 0.706984;
+  }
+
+  // Ensure velocity is not negative (physical constraint)
+  if (u < 0.0) u = 1.e-8;
+
+  return(u);
+}
+
+
 PetscReal InletInterpolation1(PetscReal r, UserCtx *user)   //Open Channel Inlet Profile: generated turbulence
 {
   PetscReal u;
@@ -374,6 +400,9 @@ PetscErrorCode InflowFlux(UserCtx *user)
 					if(inlet_flux<0) uin=1.;
 					else uin = inlet_flux/inletArea;
 				}
+
+				//Hossein-7/15/2025 (Verdant-SBU project)
+				if (inletprofile==LISTEP) uin = InletInterpolationLISTEP(zc, user);
 
 				//Hossein-1/21/2025 (Lehigh-SBU project)
 				/*else if (inletprofile==200){
