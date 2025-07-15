@@ -19,6 +19,7 @@ extern void WIND_vel_interpolate(UserCtx *user, double *u1, double *v1, double *
 #define SOLIDWALL 1
 #define SYMMETRIC 3
 #define FARFIELD 6
+#define LISTEP 99  // Hossein-7/15/2025: LISTEP inlet profile for ebb/flood cycles
 
 extern int ucont_plane_allocated;
 

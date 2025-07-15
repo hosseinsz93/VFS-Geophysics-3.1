@@ -53,8 +53,7 @@ PetscInt implicit = 0;
 PetscInt imp_MAX_IT = 50; 
 PetscInt radi=10;
 PetscInt inletprofile=1;
-PetscInt inletCase=0; //Hossein-7/15/2025 (Verdant-SBU project)
-PetscInt inletCase=1;
+PetscInt inletCase=1; //Hossein-7/15/2025 (Verdant-SBU project): 1=Flood, 2=Ebb
 PetscInt inletprofile_tmprt=1;
 PetscReal CMx_c=0., CMy_c=0., CMz_c=0.;
 PetscInt  mg_MAX_IT=30, mg_idx=1, mg_preItr=1, mg_poItr=1;
