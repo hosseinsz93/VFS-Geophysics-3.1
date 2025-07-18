@@ -1250,6 +1250,12 @@ extern char path[256], gridfile[256];
 extern  double dx_min, di_min, dj_min, dk_min;
 extern  double di_max, dj_max, dk_max;
 
+// Hossein-7/18/2025 (Lehigh-SBU project) - LES variables for inflow-avg.plt output
+extern int Nx_LES, Ny_LES;
+extern double **X_LES, **Y_LES, **Z_LES;
+extern Cmpnts **U_g1;
+extern double **uu_g1, **vv_g1, **ww_g1, **uv_g1, **vw_g1, **wu_g1;
+
 extern PetscReal max_cs;//, Fr;
 extern IBMNodes	*ibm_ptr;
 extern  FSInfo        *fsi_ptr;

@@ -1801,6 +1801,85 @@ PetscErrorCode TECIOOut_Averaging(UserCtx *user)	// seokkoo
 	
 		delete []x;
 	}
+
+	// Hossein-7/18/2025 (Lehigh-SBU project) - Add inflow-avg.plt timeseries output
+	FILE *f_avg;
+	char filen_avg[80];
+
+	printf("output tecplot file\n");
+	sprintf(filen_avg, "%s/inflow-avg.plt", path);
+
+	f_avg = fopen(filen_avg, "w");
+	fprintf(f_avg, "Variables=x,y,z,U,V,W,uu,vv,ww,uv,vw,wu\n");
+
+	fprintf(f_avg, "ZONE T='QUADRILATERAL', N=%d, E=%d, F=FEBLOCK, ET=QUADRILATERAL, VARLOCATION=([1-12]=NODAL)\n", (Nx_LES-1)*(Ny_LES-1), (Nx_LES-2)*(Ny_LES-2));
+
+	for (j=0;j<Ny_LES-1;j++)
+	for (i=0;i<Nx_LES-1;i++) {
+		fprintf(f_avg, "%le\n", X_LES[j][i]);
+	}
+	for (j=0;j<Ny_LES-1;j++)
+	for (i=0;i<Nx_LES-1;i++) {
+		fprintf(f_avg, "%le\n", Y_LES[j][i]);
+	}
+
+	for (j=0;j<Ny_LES-1;j++)
+	for (i=0;i<Nx_LES-1;i++) {
+		fprintf(f_avg, "%le\n", Z_LES[j][i]);
+	}
+
+	for (j=0;j<Ny_LES-1;j++)
+	for (i=0;i<Nx_LES-1;i++) {
+		fprintf(f_avg, "%le\n", U_g1[j][i].x);
+	}
+
+	for (j=0;j<Ny_LES-1;j++)
+	for (i=0;i<Nx_LES-1;i++) {
+		fprintf(f_avg, "%le\n", U_g1[j][i].y);
+	}
+
+	for (j=0;j<Ny_LES-1;j++)
+	for (i=0;i<Nx_LES-1;i++) {
+		fprintf(f_avg, "%le\n", U_g1[j][i].z);
+	}
+
+	for (j=0;j<Ny_LES-1;j++)
+	for (i=0;i<Nx_LES-1;i++) {
+		fprintf(f_avg, "%le\n", uu_g1[j][i]);
+	}
+
+	for (j=0;j<Ny_LES-1;j++)
+	for (i=0;i<Nx_LES-1;i++) {
+		fprintf(f_avg, "%le\n", vv_g1[j][i]);
+	}
+
+	for (j=0;j<Ny_LES-1;j++)
+	for (i=0;i<Nx_LES-1;i++) {
+		fprintf(f_avg, "%le\n", ww_g1[j][i]);
+	}
+
+	for (j=0;j<Ny_LES-1;j++)
+	for (i=0;i<Nx_LES-1;i++) {
+		fprintf(f_avg, "%le\n", uv_g1[j][i]);
+	}
+
+	for (j=0;j<Ny_LES-1;j++)
+	for (i=0;i<Nx_LES-1;i++) {
+		fprintf(f_avg, "%le\n", vw_g1[j][i]);
+	}
+
+	for (j=0;j<Ny_LES-1;j++)
+	for (i=0;i<Nx_LES-1;i++) {
+		fprintf(f_avg, "%le\n", wu_g1[j][i]);
+	}
+
+	for (j=1;j<Ny_LES-1;j++)
+	for (i=1;i<Nx_LES-1;i++) {
+		fprintf(f_avg, "%d %d %d %d\n", (j-1)*(Nx_LES-1)+i, (j-1)*(Nx_LES-1)+i+1, (j)*(Nx_LES-1)+i+1, (j)*(Nx_LES-1)+i);
+	}
+
+	fclose(f_avg);
+
 	I = TECEND100();
 	return 0;
 }
